@@ -19,6 +19,7 @@
 import struct
 import datetime
 import logging
+import time
 
 __version__ = '0.1'
 
@@ -47,14 +48,14 @@ class DeviceBluetooth:
         return self.bluetooth.discover_devices(duration=8, lookup_names=True, lookup_class=True)
 
     def connect(self, mac):
-        logging.debug('OPEN')
+        logging.debug('BLUETOOTH OPEN')
         self.dev = self.bluetooth.BluetoothSocket(self.bluetooth.RFCOMM)
         self.dev.connect((mac, 1))
 
     def close(self):
         if self.dev is None:
             return
-        logging.debug('CLOSE')
+        logging.debug('BLUETOOTH CLOSE')
         self.dev.close()
 
     def send(self, data):
@@ -71,37 +72,70 @@ class DeviceBluetooth:
 
 class DeviceSerial:
     dev = None
+    paramPort = None
 
     def __init__(self, device=None):
         import serial
         self.serial = serial
+        self.paramPort = device
 
         if device is not None:
             self.connect(device)
 
     def connect(self, device):
-        logging.debug('OPEN')
+        logging.debug('SERIAL OPEN: ' + device)
         self.dev = self.serial.Serial()
         self.dev.port = device
         self.dev.baudrate = 9600
         self.dev.parity = 'N'
-        self.dev.writeTimeout = 0
+        self.dev.timeout = 1
+        self.dev.writeTimeout = 1
         self.dev.open()
 
     def close(self):
         if self.dev is None:
             return
-        logging.debug('CLOSE')
+        logging.debug('SERIAL CLOSE: ' + self.dev.port)
         self.dev.close()
 
     def send(self, data):
         logging.debug('SEND: {}'.format(repr(data)))
-        self.dev.write(data)
+        try:
+            self.dev.write(data)
+            logging.debug('SEND completed.')
+        except Exception as e:
+                logging.debug('SEND EXCEPTION')
+                self.close()
+                time.sleep(5)
+                logging.debug('SEND: reconnecting to {}'.format(self.paramPort))
+                self.connect(self.paramPort)
+
+
 
     def recv(self):
+        tryCounter = 0
+        emptyByteCounter = 0
+        logging.debug('RECV: awaiting response')
+        tmpByte = b''
         data = b''
         while(len(data) < 130):
-            data += self.dev.read()
+            tryCounter += 1
+            logging.debug('RECV: while {} '.format(tryCounter))
+            tmpByte = self.dev.read()
+            if (tmpByte == b''):
+                emptyByteCounter += 1
+                logging.debug('RECV: empty byte {} '.format(emptyByteCounter))
+
+            if (emptyByteCounter >= 5):
+                logging.debug('RECV: time to RESET!')
+                self.close()
+                self.connect(self.dev.port)
+                time.sleep(5)
+                raise Exception("No data received. Reconnecting")
+
+            logging.debug('RECV: {}'.format(repr(tmpByte)))
+            data += tmpByte
+            """ data += self.dev.read() """
         logging.debug('RECV: {}'.format(repr(data)))
         return data
 

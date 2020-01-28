@@ -120,7 +120,7 @@ class RDUMTool:
         out = {x: getattr(response, x) for x in response.labels}
         out['data_groups'] = [{'amp_hours': x.amp_hours, 'watt_hours': x.watt_hours} for x in out['data_groups']]
         out['collection_time'] = (out['collection_time'] - datetime.datetime.fromtimestamp(0)).total_seconds()
-        print(json.dumps(out))
+        print(json.dumps(out), flush=True)
 
     def print_human(self, response):
         logging.debug('DUMP: {}'.format(repr(response.dump())))
@@ -277,7 +277,11 @@ class RDUMTool:
                 if self.args.watch is None:
                     raise
                 else:
-                    logging.exception('An exception has occurred')
+                    logging.debug('Error catched:')
+                    logging.exception('An exception has occurred (see below). Executing setup_device() + sleep 5 seconds')
+                    self.setup_device()
+                    time.sleep(5)
+
             if self.args.watch is not None:
                 if not self.args.json:
                     print()
